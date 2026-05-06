@@ -46,3 +46,7 @@ if (require.main === module) {
     });
   });
 }
+
+// app.listen(config.port, () => {
+//   console.log(`[LUE] server listening on port ${config.port}`);
+// });
