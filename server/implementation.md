@@ -293,3 +293,94 @@ Results:
 ### Stop Point
 
 Phase 4 is the only new phase implemented after Phase 3. Per `ARCHITECTURE.md`, Phase 5 is intentionally not started until human approval.
+
+## Phase 5 - Hardening & Observability
+
+### Architecture Review
+
+1. Re-read the Phase 5 section of `ARCHITECTURE.md`.
+2. Focused the changes on four areas already carrying runtime risk in the current codebase:
+   - request context and logging
+   - query-pipeline failure handling
+   - per-school request limiting
+   - Postman and operator documentation
+3. No Phase 5 architecture document changes were needed beyond the improvements already made in earlier phases.
+
+### Changes Made
+
+1. Added `src/middleware/requestContext.ts`:
+   - Generates a UUID per request.
+   - Stores it on `req.requestId`.
+   - Adds `X-Request-ID` to every response.
+2. Added `src/utils/logger.ts`:
+   - Centralizes JSON logging.
+   - Normalizes request-scoped logging fields.
+   - Keeps every server log line parseable as JSON.
+3. Updated `src/types/express.d.ts` to include `requestId` on `Express.Request`.
+4. Updated `src/middleware/requestLogger.ts`:
+   - Replaced plain-text logs with structured JSON request logs.
+5. Added `src/middleware/rateLimiter.ts`:
+   - Implements an in-memory per-school rate limiter.
+   - Uses configurable requests-per-minute.
+   - Returns `429` with `Retry-After` when exceeded.
+6. Updated `src/config/index.ts`, `.env`, and `.env.example`:
+   - Added `RATE_LIMIT_REQUESTS_PER_MINUTE`.
+   - Added typed `rateLimit` config.
+7. Updated `src/services/llm.service.ts`:
+   - Added shared SSE helpers.
+   - Ensures Gemini failures return structured SSE error events and close cleanly.
+   - Emits structured JSON error logs for LLM failures.
+8. Updated `src/routes/query.route.ts`:
+   - Applies the per-school rate limiter after session parsing.
+   - Returns structured SSE error events when Cloudflare embedding fails.
+   - Falls back to a no-context prompt when Pinecone retrieval fails, while still logging the retrieval error.
+   - Replaced all pipeline console logs with structured JSON events containing request id, school, role, step, and latency.
+9. Updated `src/routes/health.route.ts`:
+   - Replaced the auth debug filter log with structured JSON.
+   - Added current rate-limit settings to the health payload.
+10. Updated `src/app.ts`:
+    - Installs the request-context middleware before request logging.
+    - Replaced startup and unhandled-error logs with structured JSON logs.
+11. Added `README.md`:
+    - Documents the current Postman flow for `/api/health`, `/api/health/auth`, `/api/ingest`, and `/api/query`.
+    - Includes example tokens, body shapes, SSE examples, and expected responses.
+
+### Verification
+
+Verification was run after implementation:
+
+1. `npm run build`
+2. Cloudflare failure check using a temporary env file with `CLOUDFLARE_API_TOKEN=wrong-token`
+3. Pinecone failure check using a temporary env file with `PINECONE_API_KEY=wrong-key`
+4. Rate-limit check using a temporary env file with `RATE_LIMIT_REQUESTS_PER_MINUTE=1`
+5. Inspection of server stdout/stderr logs for JSON-only logging
+
+Results:
+
+1. `npm run build` passed with `tsc --noEmit`.
+2. Wrong Cloudflare token returned a clean SSE error event:
+   `data: {"error":"Cloudflare embedding API failed: status=401 body=..."}`
+3. After the Cloudflare failure response, `GET /api/health` still returned `200`, confirming the server stayed running.
+4. Wrong Pinecone key returned a normal SSE completion with no retrieved context:
+   `data: {"text":"I don't have that information available right now."}`
+5. With the wrong Pinecone key, `GET /api/health` returned `pinecone: "unavailable"`.
+6. With the rate limit set to `1`, the first query succeeded and the second returned:
+   - HTTP `429`
+   - `Retry-After: 58`
+   - `{"error":"Rate limit exceeded for this school"}`
+7. `GET /api/health` included an `X-Request-ID` header during verification.
+8. Server runtime logs were all valid JSON lines, including:
+   - `server_start`
+   - `request`
+   - `filter`
+   - `embed`
+   - `retrieve`
+   - `prompt`
+   - `query_complete`
+   - `embed_error`
+   - `retrieve_error`
+   - `rate_limit`
+
+### Stop Point
+
+Phase 5 is implemented and verified. No further phase work was started after this hardening pass.

@@ -4,6 +4,7 @@ import { sessionParser } from '../middleware/sessionParser';
 import { getCacheStats } from '../services/embedding.service';
 import { checkPineconeConnection } from '../services/pinecone.service';
 import { buildPineconeFilter } from '../utils/filterBuilder';
+import { logEvent, requestLogFields } from '../utils/logger';
 
 const startedAt = Date.now();
 export const healthRouter = Router();
@@ -33,6 +34,10 @@ healthRouter.get('/', async (_req, res) => {
       embedding_dimension: config.retrieval.embeddingDimension,
       cache_ttl_ms: config.retrieval.embeddingCacheTtlMs,
     },
+    rate_limit: {
+      requests_per_minute: config.rateLimit.requestsPerMinute,
+      window_ms: config.rateLimit.windowMs,
+    },
   });
 });
 
@@ -43,7 +48,12 @@ healthRouter.get('/auth', sessionParser, (req, res) => {
   }
 
   const filter = buildPineconeFilter(req.session);
-  console.log(`[LUE] auth_filter role=${req.session.role} filter=${JSON.stringify(filter)}`);
+  logEvent({
+    ...requestLogFields(req),
+    step: 'auth_filter',
+    latency_ms: 0,
+    filter: JSON.stringify(filter),
+  });
 
   res.status(200).json({
     status: 'ok',

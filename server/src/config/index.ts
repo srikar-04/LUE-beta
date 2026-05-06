@@ -20,6 +20,7 @@ const envSchema = z.object({
   RETRIEVAL_TOP_K: z.coerce.number().int().positive().default(5),
   RELEVANCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.65),
   EMBEDDING_CACHE_TTL_MS: z.coerce.number().int().positive().default(3600000),
+  RATE_LIMIT_REQUESTS_PER_MINUTE: z.coerce.number().int().positive().default(60),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -56,6 +57,10 @@ export const config = {
     topK: env.RETRIEVAL_TOP_K,
     relevanceThreshold: env.RELEVANCE_THRESHOLD,
     embeddingCacheTtlMs: env.EMBEDDING_CACHE_TTL_MS,
+  },
+  rateLimit: {
+    requestsPerMinute: env.RATE_LIMIT_REQUESTS_PER_MINUTE,
+    windowMs: 60000,
   },
 } as const;
 
