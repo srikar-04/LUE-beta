@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config';
+import { sessionParser } from '../middleware/sessionParser';
+import { buildPineconeFilter } from '../utils/filterBuilder';
 
 const startedAt = Date.now();
 export const healthRouter = Router();
@@ -28,5 +30,20 @@ healthRouter.get('/', (_req, res) => {
       embedding_dimension: config.retrieval.embeddingDimension,
       cache_ttl_ms: config.retrieval.embeddingCacheTtlMs,
     },
+  });
+});
+
+healthRouter.get('/auth', sessionParser, (req, res) => {
+  if (!req.session) {
+    res.status(401).json({ error: 'Session not found' });
+    return;
+  }
+
+  const filter = buildPineconeFilter(req.session);
+  console.log(`[LUE] auth_filter role=${req.session.role} filter=${JSON.stringify(filter)}`);
+
+  res.status(200).json({
+    status: 'ok',
+    session: req.session,
   });
 });

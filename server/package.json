@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "dist/app.js",
   "scripts": {
-    "dev": "ts-node src/app.ts",
+    "dev": "ts-node --files src/app.ts",
     "build": "tsc --noEmit",
     "start": "node dist/app.js",
     "test": "echo \"No tests configured yet\""
