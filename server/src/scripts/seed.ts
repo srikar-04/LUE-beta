@@ -60,7 +60,7 @@ function tokenFor(value: unknown): string {
 
 async function main(): Promise<void> {
   const baseUrl = process.env.LUE_API_BASE_URL ?? 'http://localhost:3000';
-  const seedPath = path.resolve(__dirname, '..', 'data', 'seed.json');
+  const seedPath = path.resolve(process.cwd(), 'data', 'seed.json');
   const raw = await fs.readFile(seedPath, 'utf-8');
   const seed = JSON.parse(raw) as SeedFile;
 

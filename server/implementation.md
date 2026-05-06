@@ -83,7 +83,10 @@ Phase 1 is the only phase implemented. Per `ARCHITECTURE.md`, Phase 2 is intenti
 1. Re-read the Phase 2 section of `ARCHITECTURE.md` before implementation.
 2. Re-read Part 5 to copy the exact filter behavior for admin, teacher, parent, and student sessions.
 3. Confirmed Phase 2 must remain fully local and verifiable without Pinecone, Cloudflare, or Gemini calls.
-4. No architecture changes were needed in this phase.
+4. Found one environment example issue during live verification: `GEMINI_MODEL=gemini-1.5-flash` no longer exists on the configured Gemini OpenAI-compatible endpoint and now returns `404 model not found`.
+5. Improvement applied to `ARCHITECTURE.md`: updated the example Gemini model to `gemini-2.5-flash`, which is present in the current model list and works with the configured endpoint.
+6. Found one retrieval edge case during live queries: the admin home-address question matched the correct profile document, but the exact address lived in the adjacent chunk at score `0.64`, just below the `0.65` threshold.
+7. Improvement applied to `ARCHITECTURE.md`: if Pinecone already returns adjacent sibling chunks from the same document, keep them when a neighboring chunk cleared the threshold, so chunk boundaries do not hide key fields like addresses or due dates.
 
 ### Changes Made
 
@@ -222,7 +225,71 @@ Results:
    - `documents.0.metadata.content_summary`
    - `documents.0.metadata.created_at`
 6. `npm run seed` was not executed end-to-end because the current `.env` still contains Phase 1 placeholder values for Cloudflare and Pinecone. With real credentials and the server running, it will post `data/seed.json` to `/api/ingest`, then print the role tokens and query checklist.
+7. After real credentials were added, `npm run seed` initially failed because the Pinecone account had no indexes.
+8. The missing Pinecone index `lue-agent` was created as a serverless index with `dimension=768`, `metric=cosine`, and `aws/us-east-1`.
+9. After index creation, `npm run seed` completed successfully with:
+   - `success: true`
+   - `ingested: 13`
+   - `chunks_created: 26`
+10. After the user moved the seed script to `src/scripts/seed.ts`, the package script path was correct but the script still resolved the seed file from the old relative location. The script was updated to resolve `data/seed.json` from `process.cwd()` so the moved layout works reliably.
 
 ### Stop Point
 
 Phase 3 is the only new phase implemented after Phase 2. Per `ARCHITECTURE.md`, Phase 4 is intentionally not started until human approval.
+
+## Phase 4 - Query Pipeline & LLM Streaming
+
+### Architecture Review
+
+1. Re-read the Phase 4 section of `ARCHITECTURE.md`.
+2. Re-read Parts 1, 5, 7, and 10 to align the query flow, filter use, SSE behavior, and prompt format with the architecture.
+3. Used the successful Phase 3 seed state as the retrieval baseline for live query verification.
+4. No architecture changes were needed in this phase.
+
+### Changes Made
+
+1. Added `src/utils/promptBuilder.ts`:
+   - Builds the role-aware system prompt.
+   - Builds the context-plus-question user message.
+   - Uses role-specific tone and access reminders for admin, teacher, parent, and student.
+2. Added `src/services/llm.service.ts`:
+   - Uses the OpenAI SDK against Gemini's OpenAI-compatible endpoint.
+   - Streams token deltas over SSE.
+   - Emits a final SSE event with `done`, total latency, chunk count, cache hit status, and step latencies.
+   - Emits a structured SSE error event if streaming fails after headers are sent.
+3. Added `src/routes/query.route.ts`:
+   - Protects `POST /api/query` with `sessionParser`.
+   - Validates body shape with Zod.
+   - Runs the full pipeline: filter -> embed -> retrieve -> prompt -> stream.
+   - Logs filter output plus per-step latency and chunk counts.
+4. Updated `src/app.ts` to mount `/api/query`.
+5. Updated `src/services/pinecone.service.ts` so threshold-passing chunks can pull in adjacent sibling chunks from the same original document when those siblings were already returned by Pinecone.
+
+### Verification
+
+Verification was run after implementation:
+
+1. `npm run build`
+2. Seed-backed live query checks for at least the core role-isolation scenarios from Part 14.
+3. Verify SSE output shape for `POST /api/query`.
+4. Verify repeated identical query shows `embedding_cached: true`.
+
+Results:
+
+1. `npm run build` passed with `tsc --noEmit`.
+2. Direct Gemini endpoint probing showed that the configured OpenAI-compatible base URL was correct, but `gemini-1.5-flash` returned `404 model not found`.
+3. The Gemini configuration was updated to `gemini-2.5-flash` in `.env`, `.env.example`, and `ARCHITECTURE.md`.
+4. A live seeded student query for `What are Priya's fees?` returned no retrieved chunks, preserving role isolation.
+5. A live seeded student query for `When is Sports Day?` returned one relevant chunk and streamed the answer over SSE.
+6. A repeated `When is Sports Day?` query showed `embedding_cached: true` and `embedding_latency_ms: 0`.
+7. The admin home-address query initially missed because the exact address was split into the adjacent profile chunk at score `0.64`, just below the `0.65` threshold.
+8. Retrieval was improved so that if Pinecone already returns adjacent sibling chunks from the same document, they are retained when a neighboring chunk clears the relevance threshold.
+9. Direct retrieval verification after that fix returned four chunks for the admin address question, including:
+   - `profile_student_001_chunk_0`
+   - `profile_student_001_chunk_1`
+10. Direct Gemini verification with the current prompt then returned:
+    `Arjun's home address is 42, Sector 15, Dwarka, New Delhi, 110078.`
+
+### Stop Point
+
+Phase 4 is the only new phase implemented after Phase 3. Per `ARCHITECTURE.md`, Phase 5 is intentionally not started until human approval.

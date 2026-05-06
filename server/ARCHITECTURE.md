@@ -133,7 +133,10 @@ Session:    { role: "student", student_id: "s001", class_id: "class_6a", school_
     Target namespace: "school_001" (physically isolated per school)
     Apply filter from Step 3 inside the Pinecone query
     Unauthorized chunks are NEVER fetched — not even to the app server
-    Filter out results with score < RELEVANCE_THRESHOLD (default 0.65)
+Filter out results with score < RELEVANCE_THRESHOLD (default 0.65)
+If a chunk passes the threshold, adjacent sibling chunks from the same original document
+that are already present in the Pinecone result set may also be retained to avoid
+losing fields split across chunk boundaries
     Returns: { chunks: RetrievedChunk[], latency_ms: number }
        │
        ▼
@@ -1089,7 +1092,7 @@ CLOUDFLARE_EMBEDDING_MODEL=@cf/baai/bge-base-en-v1.5
 # Get API key from https://aistudio.google.com
 # Use with OpenAI SDK pointed at: https://generativelanguage.googleapis.com/v1beta/openai/
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-2.5-flash
 
 # Retrieval tuning — sensible defaults, adjust based on testing
 EMBEDDING_DIMENSION=768

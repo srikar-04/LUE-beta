@@ -9,6 +9,11 @@ interface PineconeMatch {
   metadata?: Record<string, unknown>;
 }
 
+interface CandidateChunk extends RetrievedChunk {
+  original_doc_id?: string;
+  chunk_index?: number;
+}
+
 export async function upsertVectors(schoolId: string, vectors: VectorRecord[]): Promise<void> {
   const namespace = getPineconeIndex().namespace(schoolId);
 
@@ -33,21 +38,59 @@ export async function queryVectors(
   });
 
   const matches = (response.matches ?? []) as PineconeMatch[];
-  const chunks = matches
-    .filter((match) => (match.score ?? 0) >= config.retrieval.relevanceThreshold)
-    .map((match) => {
+  const candidates = matches
+    .map((match): CandidateChunk => {
       const metadata = match.metadata ?? {};
       return {
         id: match.id ?? '',
         content: typeof metadata.content === 'string' ? metadata.content : '',
         metadata: metadata as unknown as DocumentMetadata,
         score: match.score ?? 0,
+        ...(typeof metadata.original_doc_id === 'string'
+          ? { original_doc_id: metadata.original_doc_id }
+          : {}),
+        ...(typeof metadata.chunk_index === 'number'
+          ? { chunk_index: metadata.chunk_index }
+          : {}),
       };
     })
     .filter((chunk) => chunk.id && chunk.content);
 
+  const thresholded = candidates.filter(
+    (chunk) => chunk.score >= config.retrieval.relevanceThreshold,
+  );
+
+  const keptIds = new Set(thresholded.map((chunk) => chunk.id));
+  const chunks: CandidateChunk[] = [...thresholded];
+
+  for (const keptChunk of thresholded) {
+    if (!keptChunk.original_doc_id || typeof keptChunk.chunk_index !== 'number') {
+      continue;
+    }
+
+    for (const candidate of candidates) {
+      if (
+        keptIds.has(candidate.id) ||
+        candidate.original_doc_id !== keptChunk.original_doc_id ||
+        typeof candidate.chunk_index !== 'number'
+      ) {
+        continue;
+      }
+
+      if (Math.abs(candidate.chunk_index - keptChunk.chunk_index) === 1) {
+        keptIds.add(candidate.id);
+        chunks.push(candidate);
+      }
+    }
+  }
+
   return {
-    chunks,
+    chunks: chunks.map(({ id, content, metadata, score }) => ({
+      id,
+      content,
+      metadata,
+      score,
+    })),
     latency_ms: Date.now() - start,
   };
 }
