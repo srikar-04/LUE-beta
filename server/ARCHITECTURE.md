@@ -1121,6 +1121,11 @@ during boot. Local development may use clearly marked placeholder values in a gi
 `.env` until real service credentials are available; Phase 3+ is where live credentials
 become necessary for external API acceptance tests.
 
+**Codex improvement:** Namespace values should use the canonical `school_id` string exactly
+as supplied by the session and seed data, for example `school_001`. Do not add an extra
+`school_` prefix in service code; doing so would write `school_001` records into
+`school_school_001` and make retrieval miss the seeded data.
+
 **Deliverables:**
 - `package.json` with all dependencies: `express`, `openai`, `@pinecone-database/pinecone`,
   `zod`, `dotenv`, `cors`, and their TypeScript type packages (`@types/express`, `@types/cors`, etc.)

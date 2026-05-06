@@ -1,27 +1,30 @@
 import { Router } from 'express';
 import { config } from '../config';
 import { sessionParser } from '../middleware/sessionParser';
+import { getCacheStats } from '../services/embedding.service';
+import { checkPineconeConnection } from '../services/pinecone.service';
 import { buildPineconeFilter } from '../utils/filterBuilder';
 
 const startedAt = Date.now();
 export const healthRouter = Router();
 
-healthRouter.get('/', (_req, res) => {
+healthRouter.get('/', async (_req, res) => {
+  const cacheStats = getCacheStats();
+  const pineconeStatus = await checkPineconeConnection();
+
   res.status(200).json({
     status: 'ok',
-    services: {
-      pinecone: {
-        configured: Boolean(config.pinecone.apiKey),
-        index_name: config.pinecone.indexName,
-      },
-      cloudflare: {
-        configured: Boolean(config.cloudflare.accountId && config.cloudflare.apiToken),
-        embedding_model: config.cloudflare.embeddingModel,
-      },
-      gemini: {
-        configured: Boolean(config.gemini.apiKey),
-        model: config.gemini.model,
-      },
+    pinecone: pineconeStatus,
+    cloudflare: Boolean(config.cloudflare.accountId && config.cloudflare.apiToken)
+      ? 'configured'
+      : 'missing',
+    gemini: Boolean(config.gemini.apiKey) ? 'configured' : 'missing',
+    embedding_cache_size: cacheStats.size,
+    cache_ttl_ms: cacheStats.ttl_ms,
+    service_names: {
+      pinecone_index: config.pinecone.indexName,
+      cloudflare_embedding_model: config.cloudflare.embeddingModel,
+      gemini_model: config.gemini.model,
     },
     uptime_ms: Date.now() - startedAt,
     retrieval_settings: {

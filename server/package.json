@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "ts-node --files src/app.ts",
     "build": "tsc --noEmit",
+    "seed": "ts-node --files src/scripts/seed.ts",
     "start": "node dist/app.js",
     "test": "echo \"No tests configured yet\""
   },

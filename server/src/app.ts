@@ -3,6 +3,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { config } from './config';
 import { requestLogger } from './middleware/requestLogger';
 import { healthRouter } from './routes/health.route';
+import { ingestRouter } from './routes/ingest.route';
 
 export const app = express();
 
@@ -11,6 +12,7 @@ app.use(express.json({ limit: '2mb' }));
 app.use(requestLogger);
 
 app.use('/api/health', healthRouter);
+app.use('/api/ingest', ingestRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found' });

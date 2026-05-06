@@ -66,3 +66,9 @@ export interface CacheEntry {
   vector: number[];
   expires_at: number;
 }
+
+export interface VectorRecord {
+  id: string;
+  values: number[];
+  metadata: Record<string, string | number | boolean | string[]>;
+}

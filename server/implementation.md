@@ -141,3 +141,88 @@ Results:
 ### Stop Point
 
 Phase 2 is the only new phase implemented after Phase 1. Per `ARCHITECTURE.md`, Phase 3 is intentionally not started until human approval.
+
+## Phase 3 - Embedding Service & Ingestion Pipeline
+
+### Architecture Review
+
+1. Re-read the Phase 3 section of `ARCHITECTURE.md`.
+2. Re-read Parts 6, 8, 9, 11, and 14 for the Cloudflare embedding contract, ingestion flow, chunking strategy, ingest API shape, and seed dataset requirements.
+3. Confirmed `data/seed.json` already exists and covers the Part 14 school/persona examples, so it was reused rather than replaced.
+4. Found one architecture inconsistency: some prose/examples use canonical school IDs like `school_001`, while an early Pinecone snippet prefixes with `school_${schoolId}`. Because the seed file and sessions already use `school_001`, the service implementation uses the supplied `schoolId` directly as the namespace.
+5. Improvement applied to `ARCHITECTURE.md`: clarified that namespace values should use the canonical `school_id` exactly and must not add a second `school_` prefix.
+
+### Changes Made
+
+1. Added `src/utils/chunker.ts`:
+   - Normalizes whitespace.
+   - Produces 400-character chunks.
+   - Preserves a 50-character overlap between chunks.
+   - Prefers sentence breaks, then word breaks, then hard boundaries.
+2. Added `src/services/embedding.service.ts`:
+   - Wraps Cloudflare Workers AI REST embedding calls.
+   - Implements SHA-256 normalized-query cache for `embedQuery`.
+   - Implements `embedBatch` in batches of 10 with a 50ms pause between batches.
+   - Exposes `getCacheStats()` for health reporting.
+3. Added `src/services/pinecone.service.ts`:
+   - Implements namespace-scoped `upsertVectors`.
+   - Implements namespace-scoped `queryVectors`.
+   - Uses the supplied canonical `schoolId` directly as the namespace, for example `school_001`.
+   - Applies relevance threshold filtering when mapping retrieved chunks.
+   - Adds a lightweight `checkPineconeConnection()` helper for health reporting.
+4. Added `src/services/ingestion.service.ts`:
+   - Chunks all documents.
+   - Flattens Pinecone metadata.
+   - Stores chunk content in metadata as `content`.
+   - Stores parent document ID as `original_doc_id`.
+   - Embeds all chunks.
+   - Upserts vectors to Pinecone.
+   - Returns `IngestResult`.
+5. Added `src/routes/ingest.route.ts`:
+   - Implements `POST /api/ingest`.
+   - Validates the full request body with Zod, including nested metadata.
+   - Returns a structured validation error listing invalid paths and messages.
+6. Updated `src/routes/health.route.ts`:
+   - Adds `pinecone` connection status.
+   - Adds `embedding_cache_size`.
+   - Adds `cache_ttl_ms`.
+   - Keeps configured service/model names visible.
+7. Updated `src/app.ts` to mount `/api/ingest`.
+8. Added `scripts/seed.ts`:
+   - Reads `data/seed.json`.
+   - Posts it to `/api/ingest`.
+   - Prints all four Base64 session tokens.
+   - Prints the role-isolation query checklist from Part 14.
+9. Added `npm run seed` to `package.json`.
+
+### Verification
+
+Verification was run after implementation:
+
+1. `npm run build`
+2. `POST /api/ingest` with malformed JSON to confirm Zod issue paths.
+3. `GET /api/health` to confirm cache fields exist.
+4. Direct TypeScript check for `scripts/seed.ts`.
+5. `npm run seed` when valid Cloudflare and Pinecone credentials are available in `.env`.
+
+Results:
+
+1. `npm run build` passed with `tsc --noEmit`.
+2. `scripts/seed.ts` passed a direct TypeScript check.
+3. `GET /api/health` returned `embedding_cache_size: 0` and `cache_ttl_ms: 3600000`.
+4. `GET /api/health` returned `pinecone: "unavailable"` with the current placeholder `PINECONE_API_KEY`, which is expected until real credentials are added.
+5. Malformed `POST /api/ingest` returned `400` with Zod issue paths including:
+   - `schoolId`
+   - `documents.0.id`
+   - `documents.0.content`
+   - `documents.0.metadata.school_id`
+   - `documents.0.metadata.data_category`
+   - `documents.0.metadata.access_roles`
+   - `documents.0.metadata.entity_type`
+   - `documents.0.metadata.content_summary`
+   - `documents.0.metadata.created_at`
+6. `npm run seed` was not executed end-to-end because the current `.env` still contains Phase 1 placeholder values for Cloudflare and Pinecone. With real credentials and the server running, it will post `data/seed.json` to `/api/ingest`, then print the role tokens and query checklist.
+
+### Stop Point
+
+Phase 3 is the only new phase implemented after Phase 2. Per `ARCHITECTURE.md`, Phase 4 is intentionally not started until human approval.

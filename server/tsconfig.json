@@ -18,6 +18,6 @@
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist", "scripts"]
+  "include": ["src", "src/scripts"],
+  "exclude": ["node_modules", "dist"]
 }
