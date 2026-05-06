@@ -1115,6 +1115,12 @@ EMBEDDING_CACHE_TTL_MS=3600000
 **Goal:** A working Express server that starts cleanly, validates its environment on boot,
 and returns a meaningful health check. No AI integrations yet — pure foundation.
 
+**Codex improvement:** In Phase 1, environment validation means validating presence,
+types, and defaults only. The server must not connect to Pinecone, Cloudflare, or Gemini
+during boot. Local development may use clearly marked placeholder values in a gitignored
+`.env` until real service credentials are available; Phase 3+ is where live credentials
+become necessary for external API acceptance tests.
+
 **Deliverables:**
 - `package.json` with all dependencies: `express`, `openai`, `@pinecone-database/pinecone`,
   `zod`, `dotenv`, `cors`, and their TypeScript type packages (`@types/express`, `@types/cors`, etc.)
